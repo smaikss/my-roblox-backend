@@ -5,7 +5,10 @@ const app = express();
 
 const MONGO_URI = "mongodb+srv://vladkashukvlad100:VLZ01ASq@cluster0.w6fqbcv.mongodb.net/keys_database?retryWrites=true&w=majority";
 
-mongoose.connect(MONGO_URI).then(() => console.log("✅ MongoDB Connected"));
+// Підключаємось до бази з обробкою помилок
+mongoose.connect(MONGO_URI)
+    .then(() => console.log("✅ MongoDB Connected"))
+    .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
 const KeySchema = new mongoose.Schema({
     keyString: String,
@@ -18,12 +21,22 @@ app.get('/generate', async (req, res) => {
         const newKey = "OAK-" + crypto.randomBytes(4).toString('hex').toUpperCase();
         await Key.create({ keyString: newKey });
         res.send(`<h1>Key: ${newKey}</h1><p>Expires in 24h</p>`);
-    } catch (e) { res.status(500).send("DB Error"); }
+    } catch (e) { 
+        console.error(e);
+        res.status(500).send("DB Error: " + e.message); 
+    }
 });
 
 app.get('/check', async (req, res) => {
-    const found = await Key.findOne({ keyString: req.query.key });
-    res.send(found ? "VALID" : "INVALID");
+    try {
+        const found = await Key.findOne({ keyString: req.query.key });
+        res.send(found ? "VALID" : "INVALID");
+    } catch (e) {
+        res.status(500).send("Error");
+    }
 });
 
-app.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
