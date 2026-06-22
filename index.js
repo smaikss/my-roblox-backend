@@ -26,28 +26,24 @@ app.get('/generate', async (req, res) => {
         const existingKey = await Key.findOne({ userIP: ip });
 
         if (existingKey) {
-            // Якщо ключ є — повертаємо його (дозволяємо оновлювати сторінку протягом 24 годин)
             return res.send(`<h1>Your Key: ${existingKey.keyString}</h1><p>This key is already generated for your IP. Expires in 24h</p>`);
         }
 
-        // 2. ЗАХИСТ: Якщо ключа для IP немає, перевіряємо, звідки прийшла людина
+        // 2. ЗАХИСТ: Перевіряємо, чи прийшла людина з Linkvertise або Work.ink
         const referer = req.headers.referer || req.headers.referrer;
+        const cameFromValidShortener = referer && (referer.includes('linkvertise.com') || referer.includes('work.ink'));
 
-        // Перевіряємо, чи є в реферері слово "linkvertise.com"
-        const cameFromLinkvertise = referer && referer.includes('linkvertise.com');
-
-        if (!cameFromLinkvertise) {
-            // Якщо людина зайшла за збереженим посиланням або вставила його вручну
+        if (!cameFromValidShortener) {
             return res.status(403).send(`
                 <div style="font-family: sans-serif; text-align: center; padding-top: 50px;">
                     <h1 style="color: red;">Помилка доступу (Access Denied)</h1>
                     <p>Ви намагалися зайти на пряме посилання без виконання завдання.</p>
-                    <p>Щоб отримати ключ, пройдіть через наше офіційне посилання на <b>Linkvertise</b>!</p>
+                    <p>Щоб отримати ключ, пройдіть через наше офіційне посилання на <b>Linkvertise</b> або <b>Work.ink</b>!</p>
                 </div>
             `);
         }
 
-        // 3. Якщо перевірку пройдено (людина реально з Linkvertise) — генеруємо новий ключ
+        // 3. Якщо все ок — створюємо новий ключ
         const newKey = "OAK-" + crypto.randomBytes(4).toString('hex').toUpperCase();
         
         await Key.create({ 
