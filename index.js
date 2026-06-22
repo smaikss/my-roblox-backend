@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 const app = express();
 
-// Налаштування для Render, щоб він правильно визначав IP користувача через проксі-сервери
 app.set('trust proxy', true);
 
 const MONGO_URI = "mongodb+srv://vladkashukvlad100:VLZ01ASq@cluster0.w6fqbcv.mongodb.net/keys_database?retryWrites=true&w=majority";
@@ -12,31 +11,45 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected"))
     .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
-// Додаємо поле userIP у схему
 const KeySchema = new mongoose.Schema({
     keyString: String,
-    userIP: String, // Зберігатимемо тут IP
+    userIP: String,
     createdAt: { type: Date, default: Date.now, expires: 86400 } 
 });
 const Key = mongoose.model('Key', KeySchema);
 
 app.get('/generate', async (req, res) => {
     try {
-        // Отримуємо IP-адресу користувача
         const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-        // Шукаємо, чи є вже активний ключ для цього IP
+        // 1. Спочатку перевіряємо, чи є вже активний ключ для цього IP
         const existingKey = await Key.findOne({ userIP: ip });
 
         if (existingKey) {
-            // Якщо ключ знайдено — віддаємо СТАРИЙ ключ
+            // Якщо ключ є — повертаємо його (дозволяємо оновлювати сторінку протягом 24 годин)
             return res.send(`<h1>Your Key: ${existingKey.keyString}</h1><p>This key is already generated for your IP. Expires in 24h</p>`);
         }
 
-        // Якщо ключа немає — генеруємо НОВИЙ
+        // 2. ЗАХИСТ: Якщо ключа для IP немає, перевіряємо, звідки прийшла людина
+        const referer = req.headers.referer || req.headers.referrer;
+
+        // Перевіряємо, чи є в реферері слово "linkvertise.com"
+        const cameFromLinkvertise = referer && referer.includes('linkvertise.com');
+
+        if (!cameFromLinkvertise) {
+            // Якщо людина зайшла за збереженим посиланням або вставила його вручну
+            return res.status(403).send(`
+                <div style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+                    <h1 style="color: red;">Помилка доступу (Access Denied)</h1>
+                    <p>Ви намагалися зайти на пряме посилання без виконання завдання.</p>
+                    <p>Щоб отримати ключ, пройдіть через наше офіційне посилання на <b>Linkvertise</b>!</p>
+                </div>
+            `);
+        }
+
+        // 3. Якщо перевірку пройдено (людина реально з Linkvertise) — генеруємо новий ключ
         const newKey = "OAK-" + crypto.randomBytes(4).toString('hex').toUpperCase();
         
-        // Зберігаємо ключ разом з IP в базу
         await Key.create({ 
             keyString: newKey,
             userIP: ip 
